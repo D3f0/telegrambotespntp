@@ -1,9 +1,11 @@
 // ESP8266 NodeMCU Telegram Bot code
 
+// TODO: Parametrizar la placa para la WeMos
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 #include <NTPClient.h>
+#include <WiFiUdp.h>
 
 // SSID y password,
 // y bot 
@@ -16,8 +18,15 @@ UniversalTelegramBot bot(BOT_TOKEN, client);
 int bot_mtbs = 500; //mean time between scan messages
 long bot_lasttime;   //last time messages' scan has been done
 
-const int ledPin = LED_BUILTIN;
-int ledStatus = 1;
+
+WiFiUDP ntpUDP;
+
+NTPClient timeClient(
+  ntpUDP, 
+  "europe.pool.ntp.org", 
+  3600, // Time offset
+  60000 // Time interval
+);
 
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
@@ -29,35 +38,24 @@ void handleNewMessages(int numNewMessages) {
 
     String from_name = bot.messages[i].from_name;
     if (from_name == "") from_name = "Invitado";
-    Serial.print("Atendiendo a:");
+    Serial.print("Respondiendo a ");
     Serial.println(from_name);
 
-    if (text == "/ledon") {
-      digitalWrite(ledPin, HIGH);   // turn the LED on (HIGH is the voltage level)
-      ledStatus = 1;
-      bot.sendMessage(chat_id, "Led is ON", "");
-      Serial.print("Prendiendo led para %s");
+    if (text == "/time") {
+      String formatedTime = timeClient.getFormattedTime();
+      Serial.println(formatedTime);
+      bot.sendMessage(chat_id, formatedTime, "");
     }
 
-    if (text == "/ledoff") {
-      ledStatus = 0;
-      digitalWrite(ledPin, LOW);    // turn the LED off (LOW is the voltage level)
-      bot.sendMessage(chat_id, "Led is OFF", "");
+    if (text == "/update") {
+      timeClient.update();
+      Serial.println(timeClient.getFormattedTime());
     }
 
-    if (text == "/status") {
-      if(ledStatus){
-        bot.sendMessage(chat_id, "Led is ON", "");
-      } else {
-        bot.sendMessage(chat_id, "Led is OFF", "");
-      }
-    }
 
     if (text == "/start") {
-      String welcome = "Welcome to Universal Arduino Telegram Bot library, " + from_name + ".\n";
-      welcome += "This is Flash Led Bot example.\n\n";
-      welcome += "/ledon : to switch the Led ON\n";
-      welcome += "/ledoff : to switch the Led OFF\n";
+      String welcome = "Bot telegram con NTP, " + from_name + ".\n";
+      welcome += "/time : to switch the Led OFF\n";
       welcome += "/status : Returns current status of LED\n";
       bot.sendMessage(chat_id, welcome, "Markdown");
     }
@@ -85,23 +83,35 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  pinMode(ledPin, OUTPUT); // initialize digital ledPin as an output.
-  delay(10);
-  digitalWrite(ledPin, LOW); // initialize pin as off
+  Serial.print("NTP.");
+  timeClient.begin();
+  Serial.println(".");
+
 }
+
+long lastNtpPoll = 0, now;
+
+#define INTERVAL (15*60*1000)
 
 void loop() {
   long m0, m1;
   char buff[100];
+  now = millis(); 
 
-  if (millis() > bot_lasttime + bot_mtbs)  {
+  if ((now - lastNtpPoll)>INTERVAL) {
+    timeClient.update();
+    Serial.println(timeClient.getFormattedTime());
+    lastNtpPoll = now;
+  }
+
+  if (now > (bot_lasttime + bot_mtbs))  {
     m0 = millis();
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
     m1 = millis();
     while(numNewMessages) {
       // Calculo del tiempo de atención
       dtostrf((m1 - m0) / 1000.0, 6, 4, buff);
-      Serial.printf("getUpdates tardo %s seg", buff);
+      Serial.printf("getUpdates tardo %s seg\n", buff);
   
       handleNewMessages(numNewMessages);
       numNewMessages = bot.getUpdates(bot.last_message_received + 1);
@@ -109,5 +119,6 @@ void loop() {
 
     bot_lasttime = millis();
   }
+
 }
 
