@@ -56,7 +56,7 @@ void handleNewMessages(int numNewMessages) {
     if (text == "/start") {
       String welcome = "Bot telegram con NTP, " + from_name + ".\n";
       welcome += "/time : to switch the Led OFF\n";
-      welcome += "/status : Returns current status of LED\n";
+      welcome += "/update : Returns current status of LED\n";
       bot.sendMessage(chat_id, welcome, "Markdown");
     }
   }
